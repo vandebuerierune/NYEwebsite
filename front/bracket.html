@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tournament Bracket</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <script src="/static/script.js" defer></script>
+</head>
+<body class="background">
+    <div class="bracket">
+        {% for round_index, round in enumerate(rounds) %}
+        <div class="round">
+            {% for match_index, match in enumerate(round) %}
+            <div class="match">
+                <div class="team {% if match[0] == match[2] %}winner{% elif match[1] == match[2] %}loser{% endif %}" onclick="selectWinner({{ round_index }}, {{ match_index }}, '{{ match[0] }}')">{{ match[0] }}</div>
+                <div>vs</div>
+                <div class="team {% if match[1] == match[2] %}winner{% elif match[0] == match[2] %}loser{% endif %}" onclick="selectWinner({{ round_index }}, {{ match_index }}, '{{ match[1] }}')">{{ match[1] }}</div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endfor %}
+        <div class="lowerhalf">
+            <div class="challengebox">
+                <div class="challenge underscored">
+                    Challenges!
+                </div>
+                <div id="challenge-text">{{ challenge_text }}</div>
+            </div>
+            <div class="scoreboard">
+                <div id="scoreboard">
+                    {% for team, score in scoreboard.items() %}
+                        <div class="scoremargin"><p><strong>{{ team }}: {{ score }}</strong></p></div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+</body>
+</html>

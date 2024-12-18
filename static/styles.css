@@ -1,0 +1,133 @@
+body {
+    background-color: black;
+    color: white;
+    font-family: Arial, sans-serif;
+}
+
+.bracket {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+    z-index: 1; /* Ensure the content is above the overlay */
+}
+
+.round {
+    display: flex;
+    justify-content: space-around;
+    width: 100%;
+    margin: 20px 0;
+}
+
+.match {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin: 10px;
+    width: 250px; /* Increased width */
+}
+
+.team {
+    background-color: #444;
+    border-radius: 20px;
+    padding: 10px 20px;
+    margin: 5px;
+    cursor: pointer;
+    overflow: hidden; /* Ensure text doesn't overflow */
+    text-overflow: ellipsis; /* Add ellipsis for overflow text */
+    white-space: nowrap; /* Prevent text from wrapping */
+    width: 100%; /* Ensure the team name takes up the full width */
+    font-size: 16px; /* Adjust font size as needed */
+    text-align: center; /* Center the text */
+    display: block; /* Ensure the element is a block-level element */
+}
+
+.team.selected {
+    background-color: #00f;
+}
+
+.lowerhalf {
+    display: flex;
+    justify-content: space-between;
+    width: 100%;
+    position: fixed; /* Fix the position */
+    bottom: 0; /* Align it to the bottom */
+    background-color: rgba(0, 0, 0, 0.626); /* Ensure it has a background color */
+    padding: 10px; /* Add some padding if needed */
+    z-index: 1; /* Ensure it stays above the background */
+}
+
+.challengebox {
+    width: 95%; /* Adjust as needed to ensure the scoreboard fits */
+    text-align: left;
+    padding: 2%;
+}
+
+.scoreboard {
+    width: 15%;
+    margin-top: 20px;
+    font-weight: bold;
+    color: white;
+    text-align: left;
+}
+
+.scoreboard p {
+    margin: 0;
+}
+
+.challenge {
+    color: white;
+    size: 20%;
+}
+
+.underscored {
+    border-bottom: 1px solid #888;
+    margin-bottom: 8px;
+}
+
+.container {
+    display: flex;
+}
+
+.left-half {
+    flex: 1;
+}
+
+.right-half {
+    flex: 1;
+    padding-left: 20px;
+}
+
+.scoremargin {
+    margin-bottom: 16px;
+}
+
+.winner {
+    background-color: greenyellow;
+    color: black;
+}
+
+.loser {
+    background-color: red;
+    opacity: 50%;
+}
+
+body.background {
+    position: relative;
+    z-index: 0;
+}
+
+body.background::before {
+    content: "";
+    position: fixed; /* Change to fixed to cover the entire viewport */
+    top: 0;
+    left: 0;
+    width: 100vw; /* Use viewport width */
+    height: 100vh; /* Use viewport height */
+    background-image: url('/static/assets/bg3.jpg');
+    background-size: cover;
+    background-repeat: no-repeat;
+    background-attachment: fixed;
+    opacity: 0.5;
+    z-index: -1; /* Ensure the overlay is behind the content */
+}

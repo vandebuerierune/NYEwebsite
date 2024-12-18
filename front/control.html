@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Team Control</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <script src="/static/control.js" defer></script>
+</head>
+<body>
+    <div id="overlay" class="overlay">
+        <div class="control">
+            <h1 id="select-heading">Select Your Team</h1>
+            <select id="team-select">
+                {% for team in teams %}
+                <option value="{{ team }}">{{ team }}</option>
+                {% endfor %}
+            </select>
+            <button onclick="selectTeam()">Select Team</button>
+        </div>
+    </div>
+    
+    <div id="actions">
+        <h2 id="actions-heading">Actions</h2>
+        <button id="reportWinButton" onclick="reportWin()">Report Win</button>
+        <button id="reportChallengeButton" onclick="reportChallenge()">Report Challenge Completed</button>
+    </div>
+</body>
+</html>

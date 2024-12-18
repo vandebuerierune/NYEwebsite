@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reset Database</title>
+</head>
+<body>
+    <h1>Reset Database</h1>
+    <button id="resetButton">Reset Scores and Matches</button>
+
+    <script>
+        document.getElementById('resetButton').addEventListener('click', function() {
+            fetch('/reset-database', {
+                method: 'POST'
+            })
+            .then(response => response.json())
+            .then(data => {
+                alert('Database reset successfully!');
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Failed to reset the database.');
+            });
+        });
+    </script>
+</body>
+</html>
