@@ -22,6 +22,7 @@ function selectWinner(roundIndex, matchIndex, teamIndex) {
     .then(data => {
         if (data.success) {
             updateBracket(data.rounds);
+            updateScoreboard(); // Call the new function to update the scoreboard
         }
     });
 }
@@ -52,3 +53,24 @@ function updateBracket(rounds) {
         bracket.appendChild(roundDiv);
     });
 }
+
+let lastHash = null;
+
+function checkForUpdates() {
+    fetch('/check_updates')
+        .then(response => response.json())
+        .then(data => {
+            if (lastHash && lastHash !== data.hash) {
+                location.reload();
+            }
+            lastHash = data.hash;
+        })
+        .catch(error => console.error('Error checking for updates:', error));
+}
+
+// Check for updates every 10 seconds
+setInterval(checkForUpdates, 10000);
+
+document.addEventListener('DOMContentLoaded', function() {
+    checkForUpdates(); // Initial check
+});

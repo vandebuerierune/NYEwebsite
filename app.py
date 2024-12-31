@@ -2,6 +2,8 @@ from flask import Flask, render_template, request, jsonify, current_app
 from flask_sqlalchemy import SQLAlchemy
 from dotenv import load_dotenv
 import os
+import hashlib
+
 
 load_dotenv()
 
@@ -10,7 +12,7 @@ app = Flask(__name__, template_folder='front')
 DB_USER = "dbuser"
 DB_PASSWORD = "PoppyJungle"
 DB_NAME = "NYE"
-DB_HOST = "91.180.11.226"
+DB_HOST = "192.168.1.100"
 
 app.config['SQLALCHEMY_DATABASE_URI'] = f'mysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}/{DB_NAME}'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -49,7 +51,7 @@ def bracket():
         matches = Match.query.filter_by(round=round_index).all()
         
         if not matches:
-            create_matches_for_round(round_index)
+            create_next_round_matches(round_index)
             matches = Match.query.filter_by(round=round_index).all()
         
         print(f"Matches in round {round_index}: {matches}")
@@ -77,56 +79,68 @@ def report_win():
     data = request.json
     team_name = data['team']
     team = Team.query.filter_by(name=team_name).first()
-    
+
     if not team:
         return jsonify(success=False, error="Team not found"), 400
-    
-    match = Match.query.filter((Match.team1_id == team.id) | (Match.team2_id == team.id)).first()
+
+    match = Match.query.filter(
+        (Match.team1_id == team.id) | (Match.team2_id == team.id), 
+        Match.round == data['round']
+    ).first()
     if not match:
         return jsonify(success=False, error="Match not found"), 400
-    
+
     match.winner_id = team.id
-    team.wins += 1  # Increment the wins
+    team.wins += 1
     db.session.commit()
-    
-    # Propagate the winner to the next round
-    next_round = match.round + 1
-    winners = Match.query.filter(Match.round == match.round, Match.winner_id.isnot(None)).all()
-    winner_ids = [winner.winner_id for winner in winners]
-    
-    # Update existing matches with "TBD" opponents or create new matches
-    existing_match = Match.query.filter_by(round=next_round, team2_id=None).first()
-    if existing_match:
-        existing_match.team2_id = team.id
-    else:
-        # Create new matches for the next round if they don't exist
-        if not Match.query.filter_by(round=next_round).count():
-            for i in range(0, len(winner_ids), 2):
-                team1_id = winner_ids[i]
-                team2_id = winner_ids[i + 1] if i + 1 < len(winner_ids) else None
-                new_match = Match(round=next_round, team1_id=team1_id, team2_id=team2_id)
-                db.session.add(new_match)
-        else:
-            # If there are existing matches, add the new winner to a new match
-            new_match = Match(round=next_round, team1_id=team.id, team2_id=None)
+
+    # Check if all matches in the current round are completed
+    current_round = match.round
+    unfinished_matches = Match.query.filter_by(round=current_round, winner_id=None).count()
+
+    if unfinished_matches == 0:  # All matches are completed
+        winners = Match.query.filter_by(round=current_round).all()
+        winner_ids = [m.winner_id for m in winners]
+
+        # Create new matches for the next round
+        next_round = current_round + 1
+        for i in range(0, len(winner_ids), 2):
+            team1_id = winner_ids[i]
+            team2_id = winner_ids[i + 1] if i + 1 < len(winner_ids) else None
+            new_match = Match(round=next_round, team1_id=team1_id, team2_id=team2_id)
             db.session.add(new_match)
-    
-    db.session.commit()
-    
+        db.session.commit()
+
     return jsonify(success=True)
 
-def create_matches_for_round(round_number):
+
+
+def create_next_round_matches(current_round):
+    # Check if matches for the next round already exist
+    next_round = current_round + 1
+    existing_matches = Match.query.filter_by(round=next_round).all()
+
+    if existing_matches:
+        return existing_matches  # Return existing matches, no need to recreate
+
+    # Get all teams sorted by wins
     teams = Team.query.order_by(Team.wins.desc()).all()
+
     matches = []
-    
+
+    # Pair teams based on their win count
     for i in range(0, len(teams), 2):
         team1 = teams[i]
-        team2 = teams[i + 1] if i + 1 < len(teams) else None
-        match = Match(round=round_number, team1_id=team1.id, team2_id=team2.id if team2 else None)
+        team2 = teams[i + 1] if i + 1 < len(teams) else None  # Handle odd number of teams
+
+        match = Match(round=next_round, team1_id=team1.id, team2_id=team2.id if team2 else None)
         matches.append(match)
-    
+
     db.session.add_all(matches)
     db.session.commit()
+
+    return matches
+
 
 @app.route('/control')
 def control():
@@ -165,6 +179,35 @@ def reset_database():
     
     return jsonify(success=True)
 
+@app.route('/update_scoreboard')
+def update_scoreboard():
+    teams = Team.query.order_by(Team.score.desc()).all()
+    scoreboard_html = render_template('bracket.html', teams=teams)
+    return jsonify(scoreboard_html=scoreboard_html)
+
+@app.route('/check_updates')
+def check_updates():
+    teams = Team.query.order_by(Team.id).all()
+    teams_data = ''.join([f'{team.id}{team.score}{team.wins}' for team in teams])
+    teams_hash = hashlib.md5(teams_data.encode()).hexdigest()
+    return jsonify(hash=teams_hash)
+
+def get_rounds_data():
+    rounds = []
+    num_rounds = db.session.query(db.func.max(Match.round)).scalar() or 0
+    
+    for round_index in range(num_rounds + 1):
+        matches = Match.query.filter_by(round=round_index).all()
+        round_matches = []
+        for match in matches:
+            team1 = db.session.get(Team, match.team1_id)
+            team2 = db.session.get(Team, match.team2_id)
+            winner = db.session.get(Team, match.winner_id)
+            round_matches.append((team1.name if team1 else "TBD", team2.name if team2 else "TBD", winner.name if winner else "TBD"))
+        rounds.append(round_matches)
+    
+    return rounds
+
 @app.route('/reset')
 def reset_page():
     return render_template('reset.html')
@@ -183,4 +226,4 @@ def get_eligible_teams(round_number):
     return winner_ids
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True, port=8080)

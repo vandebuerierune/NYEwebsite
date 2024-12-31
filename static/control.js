@@ -38,7 +38,7 @@ function reportWin() {
     .then(data => {
         if (data.success) {
             alert('Win reported successfully!');
-            //window.location.href = '/';  // Reload the bracket page
+            updateBracketAndScoreboard(); // Update both the bracket and scoreboard
         } else {
             alert(`Error: ${data.error}`);
             button.disabled = false;  // Re-enable the button if there's an error
@@ -64,7 +64,7 @@ function reportChallenge() {
     .then(data => {
         if (data.success) {
             alert('Challenge completed reported successfully!');
-            //window.location.href = '/';  // Reload the bracket page
+            updateBracketAndScoreboard(); // Update both the bracket and scoreboard
         } else {
             alert(`Error: ${data.error}`);
             button.disabled = false;  // Re-enable the button if there's an error
@@ -74,6 +74,15 @@ function reportChallenge() {
         console.error('Error:', error);
         button.disabled = false;  // Re-enable the button if there's an error
     });
+}
+
+function updateBracketAndScoreboard() {
+    fetch('/update_bracket_and_scoreboard')
+        .then(response => response.json())
+        .then(data => {
+            updateBracket(data.rounds);
+            document.getElementById('scoreboard').innerHTML = data.scoreboard_html;
+        });
 }
 
 document.addEventListener('DOMContentLoaded', function() {
