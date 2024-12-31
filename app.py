@@ -1,30 +1,32 @@
-from flask import Flask, render_template, request, jsonify, current_app
+from flask import Flask, render_template, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from dotenv import load_dotenv
 import os
 import hashlib
 
-
+# Load environment variables
 load_dotenv()
 
+# Initialize Flask app
 app = Flask(__name__, template_folder='front')
 
+# Database configuration
 DB_USER = "dbuser"
 DB_PASSWORD = "PoppyJungle"
 DB_NAME = "NYE"
 DB_HOST = "192.168.1.100"
-
 app.config['SQLALCHEMY_DATABASE_URI'] = f'mysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}/{DB_NAME}'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
 
+# Models
 class Team(db.Model):
     id = db.Column(db.BigInteger, primary_key=True)
     name = db.Column(db.String(255), nullable=False)
-    score = db.Column(db.BigInteger, nullable=True)
-    wins = db.Column(db.Integer, default=0)  # Add this line
-    
+    score = db.Column(db.BigInteger, default=0)
+    wins = db.Column(db.Integer, default=0)
+
 class Match(db.Model):
     id = db.Column(db.BigInteger, primary_key=True)
     round = db.Column(db.Integer, nullable=False)
@@ -32,47 +34,150 @@ class Match(db.Model):
     team2_id = db.Column(db.BigInteger, db.ForeignKey('team.id'), nullable=True)
     winner_id = db.Column(db.BigInteger, db.ForeignKey('team.id'), nullable=True)
 
+
 class Challenge(db.Model):
-    id = db.Column(db.BigInteger, primary_key=True)
-    description = db.Column(db.Text, nullable=False)
-    completed = db.Column(db.Boolean, default=False)
+    id = db.Column(db.Integer, primary_key=True)
+    description = db.Column(db.String(255), nullable=False)
+    completed = db.Column(db.Boolean, default=False, nullable=False)
+
+    def __repr__(self):
+        return f"<Challenge {self.id}>"
 
 with app.app_context():
     db.create_all()
 
+# Routes
 @app.route('/')
 def bracket():
-    rounds = []
-    num_rounds = db.session.query(db.func.max(Match.round)).scalar() or 0
-    print(f"Number of rounds: {num_rounds}")
-    
-    for round_index in range(num_rounds + 1):
-        print(f"Processing round {round_index}")
-        matches = Match.query.filter_by(round=round_index).all()
-        
-        if not matches:
-            create_next_round_matches(round_index)
-            matches = Match.query.filter_by(round=round_index).all()
-        
-        print(f"Matches in round {round_index}: {matches}")
-        
-        round_matches = []
-        for match in matches:
-            team1 = Team.query.get(match.team1_id)
-            team2 = Team.query.get(match.team2_id)
-            winner = Team.query.get(match.winner_id)
-            round_matches.append((team1.name if team1 else "TBD", team2.name if team2 else "TBD", winner.name if winner else "TBD"))
-            
-        print(f"Round {round_index} matches: {round_matches}")
-        rounds.append(round_matches)
-    
-    print(f"Final rounds data: {rounds}")
-    
-    # Query the database for team scores and sort them by score in descending order
+    rounds = get_rounds_data()
     teams = Team.query.order_by(Team.score.desc()).all()
     scoreboard = {team.name: team.score for team in teams}
+    return render_template('bracket.html', rounds=rounds, enumerate=enumerate, scoreboard=scoreboard)
+
+@app.route('/reset')
+def reset_page():
+    return render_template('reset.html')
+
+@app.route('/control')
+def control():
+    # Get all teams from the database
+    teams = Team.query.all()
+    # Render the control page with the list of team names
+    return render_template('control.html', teams=[team.name for team in teams])
+
+@app.route('/tournament_bracket')
+def tournament_bracket():
+    # Fetch the first incomplete challenge
+    challenge = Challenge.query.filter_by(completed=False).first()
+
+    # If no challenge is incomplete
+    challenge_text = challenge.description if challenge else "No challenges available."
+    challenge_id = challenge.id if challenge else None
+
+    return render_template('bracket.html', challenge_text=challenge_text, challenge_id=challenge_id)
+
+@app.route('/complete_challenge', methods=['POST'])
+def complete_challenge():
+    # Get the challenge ID from the request
+    data = request.json
+    challenge_id = data.get('challenge_id')
+    challenge = Challenge.query.get(challenge_id)
+
+    if challenge:
+        # Mark the challenge as completed
+        challenge.completed = True
+        db.session.commit()
+
+        # Get the next challenge to show
+        next_challenge = Challenge.query.filter_by(completed=False).first()
+        next_challenge_text = next_challenge.description if next_challenge else "No more challenges."
+
+        return jsonify(success=True, message="Challenge completed", next_challenge=next_challenge_text)
     
-    return render_template('bracket.html', rounds=rounds, challenge_text="Initial Challenge Text", enumerate=enumerate, scoreboard=scoreboard)
+    return jsonify(success=False, error="Challenge not found"), 404
+
+@app.route('/reset-database', methods=['POST'])
+def reset_database():
+    db.session.query(Team).update({Team.score: 0, Team.wins: 0})
+    db.session.query(Match).delete()
+    db.session.commit()
+    return jsonify(success=True)
+
+@app.route('/calculate-next-matches', methods=['POST'])
+def calculate_next_matches():
+    num_rounds = db.session.query(db.func.max(Match.round)).scalar() or 0
+    create_next_round_matches(num_rounds)
+    return jsonify(success=True, message="Next matches calculated successfully.")
+
+import hashlib
+
+@app.route('/check_updates')
+def check_updates():
+    # Query all teams ordered by their id
+    teams = Team.query.order_by(Team.id).all()
+    
+    # Concatenate team data (id, score, wins) into a string
+    teams_data = ''.join([f'{team.id}{team.score}{team.wins}' for team in teams])
+    
+    # Generate a hash of the concatenated data
+    teams_hash = hashlib.md5(teams_data.encode()).hexdigest()
+    
+    # Return the hash as a response
+    return jsonify(hash=teams_hash)
+
+@app.route('/report_challenge', methods=['POST'])
+def report_challenge():
+    data = request.json
+    team_name = data['team']
+
+    team = Team.query.filter_by(name=team_name).first()
+    
+    if not team:
+        return jsonify(success=False, error="Team not found"), 400
+
+    # Mark challenge as completed
+    challenge = Challenge.query.filter_by(completed=False).first()
+    
+    if not challenge:
+        return jsonify(success=False, error="No incomplete challenges found."), 400
+
+    challenge.completed = True  # Mark the challenge as completed
+    db.session.commit()
+
+    # Optionally, increment score for completing the challenge
+    team.score += 1
+    db.session.commit()
+
+    return jsonify(success=True, message="Challenge reported successfully!")
+
+@app.route('/update_bracket_and_scoreboard')
+def update_bracket_and_scoreboard():
+    rounds = get_rounds_data()  # Get the updated rounds data
+    teams = Team.query.order_by(Team.score.desc()).all()  # Sorted by score
+    scoreboard_html = render_template('scoreboard.html', teams=teams)
+    
+    return jsonify(rounds=rounds, scoreboard_html=scoreboard_html)
+
+
+
+
+
+@app.route('/update_challenge', methods=['POST'])
+def update_challenge():
+    data = request.json
+    challenge_text = data['challenge_text']
+    
+    # Assuming you only want to update the first incomplete challenge
+    challenge = Challenge.query.filter_by(completed=False).first()
+    
+    if not challenge:
+        return jsonify(success=False, error="No incomplete challenges to update."), 400
+    
+    challenge.description = challenge_text
+    db.session.commit()
+    
+    return jsonify(success=True, message="Challenge updated successfully.")
+
 
 @app.route('/report_win', methods=['POST'])
 def report_win():
@@ -83,147 +188,58 @@ def report_win():
     if not team:
         return jsonify(success=False, error="Team not found"), 400
 
-    match = Match.query.filter(
-        (Match.team1_id == team.id) | (Match.team2_id == team.id), 
-        Match.round == data['round']
-    ).first()
-    if not match:
-        return jsonify(success=False, error="Match not found"), 400
-
-    match.winner_id = team.id
+    # Increment wins in the database directly
     team.wins += 1
     db.session.commit()
 
-    # Check if all matches in the current round are completed
-    current_round = match.round
-    unfinished_matches = Match.query.filter_by(round=current_round, winner_id=None).count()
+    # Update the winner for the match
+    inferred_round = Match.query.filter_by(winner_id=team.id).count() + 1
+    match = Match.query.filter(
+        ((Match.team1_id == team.id) | (Match.team2_id == team.id)) & (Match.round == inferred_round)
+    ).first()
 
-    if unfinished_matches == 0:  # All matches are completed
-        winners = Match.query.filter_by(round=current_round).all()
-        winner_ids = [m.winner_id for m in winners]
+    if not match:
+        return jsonify(success=False, error="Match not found for inferred round"), 400
 
-        # Create new matches for the next round
-        next_round = current_round + 1
-        for i in range(0, len(winner_ids), 2):
-            team1_id = winner_ids[i]
-            team2_id = winner_ids[i + 1] if i + 1 < len(winner_ids) else None
-            new_match = Match(round=next_round, team1_id=team1_id, team2_id=team2_id)
-            db.session.add(new_match)
-        db.session.commit()
+    match.winner_id = team.id
+    db.session.commit()
 
-    return jsonify(success=True)
+    return jsonify(success=True, message=f"Win recorded for round {inferred_round}"), 200
 
-
-
+# Utility Functions
 def create_next_round_matches(current_round):
-    # Check if matches for the next round already exist
     next_round = current_round + 1
     existing_matches = Match.query.filter_by(round=next_round).all()
-
     if existing_matches:
-        return existing_matches  # Return existing matches, no need to recreate
+        return existing_matches
 
-    # Get all teams sorted by wins
     teams = Team.query.order_by(Team.wins.desc()).all()
-
     matches = []
-
-    # Pair teams based on their win count
     for i in range(0, len(teams), 2):
         team1 = teams[i]
-        team2 = teams[i + 1] if i + 1 < len(teams) else None  # Handle odd number of teams
-
+        team2 = teams[i + 1] if i + 1 < len(teams) else None
         match = Match(round=next_round, team1_id=team1.id, team2_id=team2.id if team2 else None)
         matches.append(match)
 
     db.session.add_all(matches)
     db.session.commit()
-
     return matches
-
-
-@app.route('/control')
-def control():
-    teams = Team.query.all()
-    return render_template('control.html', teams=[team.name for team in teams])
-
-@app.route('/select_team', methods=['POST'])
-def select_team():
-    data = request.json
-    selected_team = data['team']
-    return jsonify(success=True)
-
-@app.route('/report_challenge', methods=['POST'])
-def report_challenge():
-    data = request.json
-    team_name = data['team']
-    team = Team.query.filter_by(name=team_name).first()
-    
-    if not team:
-        return jsonify(success=False, error="Team not found"), 400
-    
-    team.score = (team.score or 0) + 1  # Increment the score, treating NULL as 0
-    db.session.commit()
-    
-    return jsonify(success=True)
-
-@app.route('/reset-database', methods=['POST'])
-def reset_database():
-    # Reset scores
-    db.session.query(Team).update({Team.score: 0, Team.wins: 0})
-    
-    # Delete all matches
-    db.session.query(Match).delete()
-    
-    db.session.commit()
-    
-    return jsonify(success=True)
-
-@app.route('/update_scoreboard')
-def update_scoreboard():
-    teams = Team.query.order_by(Team.score.desc()).all()
-    scoreboard_html = render_template('bracket.html', teams=teams)
-    return jsonify(scoreboard_html=scoreboard_html)
-
-@app.route('/check_updates')
-def check_updates():
-    teams = Team.query.order_by(Team.id).all()
-    teams_data = ''.join([f'{team.id}{team.score}{team.wins}' for team in teams])
-    teams_hash = hashlib.md5(teams_data.encode()).hexdigest()
-    return jsonify(hash=teams_hash)
 
 def get_rounds_data():
     rounds = []
     num_rounds = db.session.query(db.func.max(Match.round)).scalar() or 0
-    
     for round_index in range(num_rounds + 1):
         matches = Match.query.filter_by(round=round_index).all()
-        round_matches = []
-        for match in matches:
-            team1 = db.session.get(Team, match.team1_id)
-            team2 = db.session.get(Team, match.team2_id)
-            winner = db.session.get(Team, match.winner_id)
-            round_matches.append((team1.name if team1 else "TBD", team2.name if team2 else "TBD", winner.name if winner else "TBD"))
+        round_matches = [
+            (
+                Team.query.get(match.team1_id).name if match.team1_id else "TBD",
+                Team.query.get(match.team2_id).name if match.team2_id else "TBD",
+                Team.query.get(match.winner_id).name if match.winner_id else "TBD",
+            )
+            for match in matches
+        ]
         rounds.append(round_matches)
-    
     return rounds
 
-@app.route('/reset')
-def reset_page():
-    return render_template('reset.html')
-
-def get_eligible_teams(round_number):
-    winners = Match.query.filter(Match.round == round_number, Match.winner_id.isnot(None)).all()
-    winner_ids = [winner.winner_id for winner in winners]
-    
-    # Placeholder for adding teams based on challenges completed
-    # completed_challenges = Challenge.query.filter_by(completed=True).all()
-    # for challenge in completed_challenges:
-    #     team_id = challenge.team_id
-    #     if team_id not in winner_ids:
-    #         winner_ids.append(team_id)
-    
-    return winner_ids
-
 if __name__ == '__main__':
-    app.run(debug=True, port=8080)
+    app.run(host="0.0.0.0", debug=True, port=8080)

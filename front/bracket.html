@@ -20,13 +20,18 @@
             {% endfor %}
         </div>
         {% endfor %}
+
         <div class="lowerhalf">
             <div class="challengebox">
                 <div class="challenge underscored">
                     Challenges!
                 </div>
                 <div id="challenge-text">{{ challenge_text }}</div>
+                {% if challenge_id %}
+                    <button onclick="completeChallenge({{ challenge_id }})">Complete Challenge</button>
+                {% endif %}
             </div>
+
             <div class="scoreboard">
                 <div id="scoreboard">
                     {% for team, score in scoreboard.items() %}
@@ -35,5 +40,6 @@
                 </div>
             </div>
         </div>
+    </div>
 </body>
 </html>

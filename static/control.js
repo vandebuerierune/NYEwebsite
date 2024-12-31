@@ -32,7 +32,7 @@ function reportWin() {
         headers: {
             'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ team: selectedTeam }),
+        body: JSON.stringify({ team: selectedTeam, round: 1 }),
     })
     .then(response => response.json())
     .then(data => {

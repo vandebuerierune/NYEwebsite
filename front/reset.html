@@ -3,26 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Reset Database</title>
+    <title>Reset and Calculate Matches</title>
 </head>
 <body>
-    <h1>Reset Database</h1>
+    <h1>Database Management</h1>
     <button id="resetButton">Reset Scores and Matches</button>
+    <button id="calculateMatchesButton">Calculate Next Matches</button>
 
-    <script>
-        document.getElementById('resetButton').addEventListener('click', function() {
-            fetch('/reset-database', {
-                method: 'POST'
-            })
-            .then(response => response.json())
-            .then(data => {
-                alert('Database reset successfully!');
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                alert('Failed to reset the database.');
-            });
-        });
-    </script>
+    <!-- Link to the external JavaScript file -->
+    <script src="/static/reset.js"></script>
 </body>
 </html>
